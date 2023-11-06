@@ -1,0 +1,80 @@
+const { ApolloServer, gql } = require('apollo-server');
+const { RESTDataSource } = require('apollo-datasource-rest');
+
+// Define GraphQL schema
+const typeDefs = gql`
+  type User {
+    id: ID!
+    name: String!
+    email: String!
+    posts: [Post!]!
+  }
+
+  type Post {
+    id: ID!
+    title: String!
+    content: String!
+    author: User!
+  }
+
+  type Query {
+    users: [User!]!
+    posts: [Post!]!
+  }
+`;
+
+// Configure data sources
+class UsersAPI extends RESTDataSource {
+  constructor() {
+    super();
+    this.baseURL = 'https://api.example.com/users';
+  }
+
+  async getUsers() {
+    return this.get('/');
+  }
+}
+
+class PostsAPI extends RESTDataSource {
+  constructor() {
+    super();
+    this.baseURL = 'https://api.example.com/posts';
+  }
+
+  async getPosts() {
+    return this.get('/');
+  }
+}
+
+// Implement resolvers
+const resolvers = {
+  Query: {
+    users: (_, __, { dataSources }) => dataSources.usersAPI.getUsers(),
+    posts: (_, __, { dataSources }) => dataSources.postsAPI.getPosts(),
+  },
+  User: {
+    posts: (user, _, { dataSources }) => {
+      return dataSources.postsAPI.getPosts().filter(post => post.authorId === user.id);
+    },
+  },
+  Post: {
+    author: (post, _, { dataSources }) => {
+      return dataSources.usersAPI.getUsers().find(user => user.id === post.authorId);
+    },
+  },
+};
+
+// Set up Apollo Server
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  dataSources: () => ({
+    usersAPI: new UsersAPI(),
+    postsAPI: new PostsAPI(),
+  }),
+});
+
+// Start the server
+server.listen().then(({ url }) => {
+  console.log(`Server running at ${url}`);
+});
